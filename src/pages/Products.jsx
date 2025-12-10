@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { StarIcon, ShoppingCartIcon, HeartIcon, FunnelIcon } from '@heroicons/react/24/outline';
+import { FaStar, FaShoppingCart, FaHeart, FaFilter, FaSearch, FaTimes } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import api from '../api/axios';
 
@@ -11,6 +11,10 @@ export default function Products() {
   const [sortBy, setSortBy] = useState('popular');
   const [categories, setCategories] = useState(['All']);
   const [error, setError] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [priceRange, setPriceRange] = useState([0, 1000]);
+  const [showFilters, setShowFilters] = useState(false);
+  const [wishlist, setWishlist] = useState(new Set());
 
   const sortOptions = [
     { name: 'Most Popular', value: 'popular' },
@@ -24,12 +28,20 @@ export default function Products() {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
+        setIsLoading(true);
         const response = await api.get('/products');
-        setProducts(response.data.products || []);
+        const productsData = response.data.products || [];
+        setProducts(productsData);
         
         // Extract unique categories
-        const allCategories = ['All', ...new Set(response.data.products.map(p => p.category))];
+        const allCategories = ['All', ...new Set(productsData.map(p => p.category))];
         setCategories(allCategories);
+        
+        // Set max price for range slider
+        if (productsData.length > 0) {
+          const maxPrice = Math.ceil(Math.max(...productsData.map(p => p.price)));
+          setPriceRange([0, maxPrice]);
+        }
       } catch (err) {
         console.error('Error fetching products:', err);
         setError('Failed to load products. Please try again later.');
@@ -43,8 +55,20 @@ export default function Products() {
   }, []);
 
   const filteredProducts = products.filter((product) => {
-    if (selectedCategory === 'All') return true;
-    return product.category === selectedCategory;
+    // Filter by category
+    if (selectedCategory !== 'All' && product.category !== selectedCategory) return false;
+    
+    // Filter by search query
+    if (searchQuery && !product.name.toLowerCase().includes(searchQuery.toLowerCase())) {
+      return false;
+    }
+    
+    // Filter by price range
+    if (product.price < priceRange[0] || product.price > priceRange[1]) {
+      return false;
+    }
+    
+    return true;
   });
 
   const sortedProducts = [...filteredProducts].sort((a, b) => {
@@ -73,21 +97,31 @@ export default function Products() {
     }
   };
 
-  const handleAddToWishlist = async (productId) => {
-    try {
-      // In a real app, you would add the product to the wishlist
-      // await api.post('/wishlist', { productId });
+  const toggleWishlist = (productId) => {
+    const newWishlist = new Set(wishlist);
+    if (newWishlist.has(productId)) {
+      newWishlist.delete(productId);
+      toast.success('Removed from wishlist');
+    } else {
+      newWishlist.add(productId);
       toast.success('Added to wishlist!');
-    } catch (error) {
-      console.error('Error adding to wishlist:', error);
-      toast.error('Failed to add to wishlist');
     }
+    setWishlist(newWishlist);
+  };
+
+  const renderRatingStars = (rating) => {
+    return Array(5).fill(0).map((_, i) => (
+      <FaStar 
+        key={i} 
+        className={`${i < Math.floor(rating || 0) ? 'text-yellow-400' : 'text-gray-300'} w-4 h-4`} 
+      />
+    ));
   };
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+      <div className="flex justify-center items-center min-h-[50vh]">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-indigo-600"></div>
       </div>
     );
   }
@@ -98,9 +132,9 @@ export default function Products() {
         <p className="text-red-500">{error}</p>
         <button 
           onClick={() => window.location.reload()}
-          className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+          className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors"
         >
-          Retry
+          Try Again
         </button>
       </div>
     );
